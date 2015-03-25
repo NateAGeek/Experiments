@@ -1,0 +1,164 @@
+<html>
+  <head>
+    <title>AUDIO TURN UP</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/threejs/r69/three.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.5.1/jquery.min.js"></script>
+    <style type="text/css">
+      body{
+        margin: 0;
+      }
+      #WebGLCanvas{
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <script type="x-shader/x-vertex" id="vertexshader">
+      #ifdef GL_ES
+        precision highp float;
+      #endif
+      varying vec3 vNormal;
+      attribute float displacement;
+      uniform float amp;
+      varying float a;
+      varying float colorVert;
+
+      void main(){
+
+        vNormal = normal;
+        a = amp;
+        vec3 newPosition = position + normal * vec3(amp * displacement);
+
+        colorVert = length(newPosition);
+
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
+      }
+    </script>
+    <script type="x-shader/x-fragment" id="fragmentshader">
+      #ifdef GL_ES
+        precision highp float;
+      #endif
+      varying vec3 vNormal;
+      varying float a;
+      varying float colorVert;
+
+      vec3 light = normalize(vec3(0.5, 0.2, 1.0));
+      vec3 lightColor = vec3(1.0, 1.0, 1.0);
+      float strength = 0.2;
+
+      void main(){
+        float lightDot = max(0.0, dot(vNormal, light));
+        vec3 ambient = vec3(0.6*(colorVert/2.0), 0.06*(colorVert/10.0), 0.6);
+
+        vec3 colorFinal = ambient + (lightDot * lightColor * a * strength);
+
+        gl_FragColor = vec4(colorFinal, 1.0);
+      }
+    </script>
+
+    <script type="text/javascript">
+      function getRandomInt(min, max) {
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+      }
+
+      var audio = new Audio('audio/9.mp3');
+      var audioContext = new AudioContext();
+      var analyser = audioContext.createAnalyser();
+      var source = audioContext.createMediaElementSource(audio);
+      source.connect(analyser);
+      analyser.connect(audioContext.destination);
+      analyser.fftSize = 2048;
+      var bufferLength = analyser.frequencyBinCount;
+      var dataArray = new Uint8Array(bufferLength);
+      analyser.getByteTimeDomainData(dataArray);
+      analyser.smoothingTimeConstant = 0.6;
+      audio.play();
+      audio.loop = true;
+
+
+      var scene = new THREE.Scene();
+      var camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.  innerHeight, 0.1, 1000);
+  
+      var renderer = new THREE.WebGLRenderer();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.body.appendChild(renderer.domElement);
+
+      var attributes = {
+        displacement: {
+          type:'f',
+          value: []
+        }
+      };
+
+      var uniforms = {
+        amp: {
+          type: 'f', // a float
+          value: 0
+        },
+      };
+
+      var sphereMaterial = new THREE.ShaderMaterial({
+        uniforms :      uniforms,
+        attributes:     attributes,
+        vertexShader:   $("#vertexshader").text(),
+        fragmentShader: $("#fragmentshader").text()
+      });
+
+      var sphereMesh = new THREE.SphereGeometry(1, 50, 50);
+
+      var verts  = sphereMesh.vertices;
+      var values = attributes.displacement.value; 
+
+      for(var i = 0; i < verts.length; i++){
+        values.push(Math.random());
+      }
+
+      var sphere = new THREE.Mesh(sphereMesh, sphereMaterial);
+      scene.add(sphere);
+
+      camera.position.z = 5;
+
+      console.log("Buffer Res:"+bufferLength);
+
+      var BarGeo = new THREE.PlaneGeometry(.01, 0.5);
+      var BarMat = new THREE.MeshBasicMaterial({color:0xFFFFFFFF});
+
+      var Bars = [];
+
+      for(var i = 0; i < bufferLength; i++){
+        Bars[i] = new THREE.Mesh(BarGeo, BarMat);
+        Bars[i].position.x = (-350 + i) / 50.0;
+        scene.add(Bars[i]);
+      }
+
+
+
+      function render(){
+        requestAnimationFrame(render);
+
+        analyser.getByteFrequencyData(dataArray);
+
+        sphere.rotation.x += 0.01;
+        sphere.rotation.y += 0.01;
+
+        var totalHit = 0;
+
+        for(var i = 0; i < bufferLength; i++){
+          Bars[i].scale.y = dataArray[i]/64.0;
+          attributes.displacement.value[i] = Math.random();
+          totalHit += dataArray[i]/64.0;
+        }
+
+        totalHit /= bufferLength;
+        uniforms.amp.value = totalHit;
+
+        renderer.render(scene, camera);
+      }
+      render();
+    </script>
+  </body>
+
+</html>
